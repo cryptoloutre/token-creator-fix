@@ -3974,7 +3974,6 @@
   "version" "1.0.5"
 
 "avsc@https://github.com/Irys-xyz/avsc#csp-fixes":
-  "resolved" "git+ssh://git@github.com/Irys-xyz/avsc.git#a730cc8018b79e114b6a3381bbb57760a24c6cef"
   "version" "5.4.7"
 
 "axe-core@^4.6.2":
