@@ -21,6 +21,8 @@ import {
   getAssociatedTokenAddress,
   createAssociatedTokenAccountInstruction,
   createMintToInstruction,
+  createSetAuthorityInstruction,
+  AuthorityType,
 } from "@solana/spl-token";
 import {
   Connection,
@@ -73,6 +75,7 @@ export const HomeView: FC = ({}) => {
   const [symbol, setSymbol] = useState("");
   const [metadataURL, setMetadataURL] = useState("");
   const [isChecked, setIsChecked] = useState(false);
+  const [disableMintIsChecked, setDisableMintIsChecked] = useState(false);
   const [metadataMethod, setMetadataMethod] = useState("url");
   const [tokenDescription, setTokenDescription] = useState("");
   const [file, setFile] = useState<
@@ -250,6 +253,10 @@ export const HomeView: FC = ({}) => {
           MetadataInstruction
         );
 
+        if (disableMintIsChecked == true) {
+          createAccountTransaction.add(createSetAuthorityInstruction(mint, owner, AuthorityType.MintTokens,null))
+        }
+
         const createAccountSignature = await wallet.sendTransaction(
           createAccountTransaction,
           connection,
@@ -422,6 +429,15 @@ export const HomeView: FC = ({}) => {
                 onChange={(e) => setIsChecked(!isChecked)}
               />
             </div>
+            <div className="mb-4">
+              <label className="mx-2">Disable mint authority</label>
+              <input
+                className="mx-2"
+                type="checkbox"
+                checked={disableMintIsChecked}
+                onChange={(e) => setDisableMintIsChecked(!isChecked)}
+              />
+            </div>
           </div>
 
           <div className="flex justify-center">
@@ -454,7 +470,7 @@ export const HomeView: FC = ({}) => {
               </button>
             )}
           </div>
-
+          
           <div className="flex justify-center">
             {signature !== "" && (
               <div className="mt-2">
