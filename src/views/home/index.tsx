@@ -187,6 +187,13 @@ export const HomeView: FC = ({}) => {
           collectionDetails: null,
         };
 
+        const setCULimitIX = ComputeBudgetProgram.setComputeUnitLimit({
+          units: 80000,
+        });
+        const setCUPriceIX =ComputeBudgetProgram.setComputeUnitPrice({
+          microLamports: 5,
+        });
+
         const createMintAccountInstruction = SystemProgram.createAccount({
           fromPubkey: owner,
           newAccountPubkey: mint,
@@ -247,6 +254,8 @@ export const HomeView: FC = ({}) => {
         );
 
         const createAccountTransaction = new Transaction().add(
+          setCULimitIX,
+          setCUPriceIX,
           createMintAccountInstruction,
           InitMint,
           createATAInstruction,
@@ -257,10 +266,6 @@ export const HomeView: FC = ({}) => {
         if (disableMintIsChecked == true) {
           createAccountTransaction.add(createSetAuthorityInstruction(mint, owner, AuthorityType.MintTokens,null))
         }
-
-        createAccountTransaction.add(ComputeBudgetProgram.setComputeUnitPrice({
-          microLamports: 5,
-        }))
 
         const createAccountSignature = await wallet.sendTransaction(
           createAccountTransaction,
