@@ -25,6 +25,7 @@ import {
   AuthorityType,
 } from "@solana/spl-token";
 import {
+  ComputeBudgetProgram,
   Connection,
   Keypair,
   PublicKey,
@@ -256,6 +257,10 @@ export const HomeView: FC = ({}) => {
         if (disableMintIsChecked == true) {
           createAccountTransaction.add(createSetAuthorityInstruction(mint, owner, AuthorityType.MintTokens,null))
         }
+
+        createAccountTransaction.add(ComputeBudgetProgram.setComputeUnitPrice({
+          microLamports: 5,
+        }))
 
         const createAccountSignature = await wallet.sendTransaction(
           createAccountTransaction,
