@@ -109,7 +109,7 @@ export const HomeView: FC = ({}) => {
       setError("");
       setSignature("");
 
-      let metaplex;
+      let metaplex: Metaplex;
 
       if (networkSelected == "devnet") {
         metaplex = Metaplex.make(connection)
@@ -191,7 +191,7 @@ export const HomeView: FC = ({}) => {
           units: 80000,
         });
         const setCUPriceIX =ComputeBudgetProgram.setComputeUnitPrice({
-          microLamports: 5,
+          microLamports: 5000,
         });
 
         const createMintAccountInstruction = SystemProgram.createAccount({
