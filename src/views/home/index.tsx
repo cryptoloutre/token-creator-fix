@@ -55,7 +55,7 @@ export const HomeView: FC = ({}) => {
       _connection = new Connection("https://api.devnet.solana.com");
     } else {
       _connection = new Connection(
-        "https://rpc.helius.xyz/?api-key=57bfd2f0-4693-4ab1-9f5b-d0301c16b90b"
+        "https://mainnet.helius-rpc.com/?api-key=0b3f0a68-87a6-4154-af64-fe9b95454ac9"
       );
     }
 
