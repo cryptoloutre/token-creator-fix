@@ -49,10 +49,6 @@ export const HomeView: FC = ({}) => {
     getConnection();
   }, [networkSelected]);
 
-  const PROGRAM_ID = new PublicKey(
-    "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
-  );
-
   const [quantity, setQuantity] = useState(0);
   const [decimals, setDecimals] = useState(9);
   const [tokenName, setTokenName] = useState("");
