@@ -1,46 +1,27 @@
-// Next, React
 import { FC, useEffect, useState } from "react";
-
-// Wallet
 import { useWallet } from "@solana/wallet-adapter-react";
-
-// Store
-import {
-  Metaplex,
-  MetaplexFileTag,
-  bundlrStorage,
-  toMetaplexFileFromBrowser,
-  walletAdapterIdentity,
-} from "@metaplex-foundation/js";
-
-import {
-  getMinimumBalanceForRentExemptMint,
-  createInitializeMintInstruction,
-  MintLayout,
-  TOKEN_PROGRAM_ID,
-  getAssociatedTokenAddress,
-  createAssociatedTokenAccountInstruction,
-  createMintToInstruction,
-  createSetAuthorityInstruction,
-  AuthorityType,
-} from "@solana/spl-token";
-import {
-  Connection,
-  Keypair,
-  PublicKey,
-  SystemProgram,
-  Transaction,
-  TransactionInstruction,
-} from "@solana/web3.js";
-import {
-  DataV2,
-  createCreateMetadataAccountV3Instruction,
-} from "@metaplex-foundation/mpl-token-metadata";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { useNetworkConfiguration } from "contexts/NetworkConfigurationProvider";
+import {
+  percentAmount,
+  generateSigner,
+  createGenericFileFromBrowserFile,
+  GenericFile,
+  publicKey,
+} from "@metaplex-foundation/umi";
+import {
+  TokenStandard,
+  createAndMint,
+  mplTokenMetadata,
+} from "@metaplex-foundation/mpl-token-metadata";
+import { walletAdapterIdentity } from "@metaplex-foundation/umi-signer-wallet-adapters";
+import { createUmi } from "@metaplex-foundation/umi-bundle-defaults";
+import { irysUploader } from "@metaplex-foundation/umi-uploader-irys";
+import { base58 } from "@metaplex-foundation/umi/serializers";
+import { AuthorityType, setAuthority } from "@metaplex-foundation/mpl-toolbox";
 
 export const HomeView: FC = ({}) => {
   const wallet = useWallet();
-  // const { connection } = useConnection();
 
   const networkConfig = useNetworkConfiguration();
   const networkSelected = networkConfig.networkConfiguration;
@@ -51,10 +32,13 @@ export const HomeView: FC = ({}) => {
     let _connection;
 
     if (networkSelected == "devnet") {
-      _connection = new Connection("https://api.devnet.solana.com");
+      _connection = new Connection("https://api.devnet.solana.com", {
+        commitment: "confirmed",
+      });
     } else {
       _connection = new Connection(
-        "https://rpc.helius.xyz/?api-key=57bfd2f0-4693-4ab1-9f5b-d0301c16b90b"
+        "https://rpc.helius.xyz/?api-key=57bfd2f0-4693-4ab1-9f5b-d0301c16b90b",
+        { commitment: "confirmed" }
       );
     }
 
@@ -78,17 +62,7 @@ export const HomeView: FC = ({}) => {
   const [disableMintIsChecked, setDisableMintIsChecked] = useState(false);
   const [metadataMethod, setMetadataMethod] = useState("url");
   const [tokenDescription, setTokenDescription] = useState("");
-  const [file, setFile] = useState<
-    Readonly<{
-      buffer: Buffer;
-      fileName: string;
-      displayName: string;
-      uniqueName: string;
-      contentType: string | null;
-      extension: string | null;
-      tags: MetaplexFileTag[];
-    }>
-  >();
+  const [file, setFile] = useState<GenericFile>();
   const [fileName, setFileName] = useState("");
   const [iscreating, setIscreating] = useState(false);
   const [signature, setSignature] = useState("");
@@ -96,7 +70,7 @@ export const HomeView: FC = ({}) => {
 
   const handleFileChange = async (event: any) => {
     const browserFile = event.target.files[0];
-    const _file = await toMetaplexFileFromBrowser(browserFile);
+    const _file = await createGenericFileFromBrowserFile(browserFile);
     setFile(_file);
     setFileName(_file.fileName);
   };
@@ -107,37 +81,23 @@ export const HomeView: FC = ({}) => {
       setIscreating(true);
       setError("");
       setSignature("");
-
-      let metaplex;
+      const umi = createUmi(connection);
 
       if (networkSelected == "devnet") {
-        metaplex = Metaplex.make(connection)
-          .use(walletAdapterIdentity(wallet))
-          .use(
-            bundlrStorage({
-              address: "https://devnet.bundlr.network",
-              providerUrl: "https://api.devnet.solana.com",
-              timeout: 60000,
-            })
-          );
+        umi.use(
+          irysUploader({
+            providerUrl: "https://turbo.ardrive.io",
+            timeout: 60000,
+          })
+        );
       } else {
-        metaplex = Metaplex.make(connection)
-          .use(walletAdapterIdentity(wallet))
-          .use(bundlrStorage());
+        umi.use(irysUploader());
       }
 
-      const mintKeypair = Keypair.generate();
-      const mint = mintKeypair.publicKey;
-      const mint_rent = await getMinimumBalanceForRentExemptMint(connection);
+      umi.use(mplTokenMetadata()).use(walletAdapterIdentity(wallet));
 
+      const mint = generateSigner(umi);
       const owner = wallet.publicKey;
-
-      let InitMint: TransactionInstruction;
-
-      const [metadataPDA] = await PublicKey.findProgramAddress(
-        [Buffer.from("metadata"), PROGRAM_ID.toBuffer(), mint.toBuffer()],
-        PROGRAM_ID
-      );
 
       let URI: string = "";
 
@@ -150,10 +110,10 @@ export const HomeView: FC = ({}) => {
         }
       } else {
         if (file) {
-          const ImageUri = await metaplex.storage().upload(file);
+          const [ImageUri] = await umi.uploader.upload([file]);
 
           if (ImageUri) {
-            const { uri } = await metaplex.nfts().uploadMetadata({
+            const uri = await umi.uploader.uploadJson({
               name: tokenName,
               symbol: symbol,
               description: tokenDescription,
@@ -170,106 +130,49 @@ export const HomeView: FC = ({}) => {
       }
 
       if (URI != "") {
-        const tokenMetadata: DataV2 = {
+        const ixs = [];
+
+        if (disableMintIsChecked) {
+          console.log("disable mint");
+          ixs.push(
+            setAuthority(umi, {
+              authorityType: AuthorityType.MintTokens,
+              newAuthority: null,
+              owned: mint.publicKey,
+              owner: umi.identity,
+            })
+          );
+        }
+
+        if (!isChecked) {
+          console.log("disable freeze");
+          ixs.push(
+            setAuthority(umi, {
+              authorityType: AuthorityType.FreezeAccount,
+              newAuthority: null,
+              owned: mint.publicKey,
+              owner: umi.identity,
+            })
+          );
+        }
+
+        const tx = await createAndMint(umi, {
+          mint,
           name: tokenName,
           symbol: symbol,
           uri: URI,
-          sellerFeeBasisPoints: 0,
-          creators: null,
-          collection: null,
-          uses: null,
-        };
+          sellerFeeBasisPoints: percentAmount(0),
+          decimals: decimals,
+          amount: quantity * 10 ** decimals,
+          tokenOwner: publicKey(owner),
+          tokenStandard: TokenStandard.Fungible,
+        })
+          .add(ixs)
+          .sendAndConfirm(umi, {
+            confirm: { commitment: "confirmed" },
+          });
 
-        const args = {
-          data: tokenMetadata,
-          isMutable: true,
-          collectionDetails: null,
-        };
-
-        const createMintAccountInstruction = SystemProgram.createAccount({
-          fromPubkey: owner,
-          newAccountPubkey: mint,
-          space: MintLayout.span,
-          lamports: mint_rent,
-          programId: TOKEN_PROGRAM_ID,
-        });
-
-        if (isChecked) {
-          InitMint = createInitializeMintInstruction(
-            mint,
-            decimals,
-            owner,
-            owner,
-            TOKEN_PROGRAM_ID
-          );
-        } else {
-          InitMint = createInitializeMintInstruction(
-            mint,
-            decimals,
-            owner,
-            null,
-            TOKEN_PROGRAM_ID
-          );
-        }
-
-        const associatedTokenAccount = await getAssociatedTokenAddress(
-          mint,
-          owner
-        );
-
-        const createATAInstruction = createAssociatedTokenAccountInstruction(
-          owner,
-          associatedTokenAccount,
-          owner,
-          mint
-        );
-
-        const mintInstruction = createMintToInstruction(
-          mint,
-          associatedTokenAccount,
-          owner,
-          quantity * 10 ** decimals,
-          []
-        );
-
-        const MetadataInstruction = createCreateMetadataAccountV3Instruction(
-          {
-            metadata: metadataPDA,
-            mint: mint,
-            mintAuthority: owner,
-            payer: owner,
-            updateAuthority: owner,
-          },
-          {
-            createMetadataAccountArgsV3: args,
-          }
-        );
-
-        const createAccountTransaction = new Transaction().add(
-          createMintAccountInstruction,
-          InitMint,
-          createATAInstruction,
-          mintInstruction,
-          MetadataInstruction
-        );
-
-        if (disableMintIsChecked == true) {
-          createAccountTransaction.add(createSetAuthorityInstruction(mint, owner, AuthorityType.MintTokens,null))
-        }
-
-        const createAccountSignature = await wallet.sendTransaction(
-          createAccountTransaction,
-          connection,
-          { signers: [mintKeypair] }
-        );
-
-        const createAccountconfirmed = await connection.confirmTransaction(
-          createAccountSignature,
-          "confirmed"
-        );
-
-        const signature = createAccountSignature.toString();
-
+        const signature = base58.deserialize(tx.signature)[0];
         console.log(signature);
         setIscreating(false);
         setSignature(signature);
@@ -280,6 +183,7 @@ export const HomeView: FC = ({}) => {
       setError(err);
     }
   };
+
   return (
     <div className="md:hero mx-auto w-full p-4">
       <div className="md:hero-content flex flex-col">
@@ -435,7 +339,7 @@ export const HomeView: FC = ({}) => {
                 className="mx-2"
                 type="checkbox"
                 checked={disableMintIsChecked}
-                onChange={(e) => setDisableMintIsChecked(!isChecked)}
+                onChange={(e) => setDisableMintIsChecked(!disableMintIsChecked)}
               />
             </div>
           </div>
@@ -470,14 +374,16 @@ export const HomeView: FC = ({}) => {
               </button>
             )}
           </div>
-          
+
           <div className="flex justify-center">
             {signature !== "" && (
               <div className="mt-2">
                 ✅ Successfuly created! Check it{" "}
                 <a
                   target="_blank"
-                  href={"https://solscan.io/tx/" + signature}
+                  href={`https://solscan.io/tx/${signature}${
+                    networkSelected == "devnet" && "?cluster=devnet"
+                  }`}
                   rel="noreferrer"
                 >
                   <strong className="underline">here</strong>
